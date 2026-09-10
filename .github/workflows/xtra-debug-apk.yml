@@ -34,6 +34,8 @@ jobs:
           mkdir -p app/src/main/assets
           cp -R ../app app/src/main/assets/app
           sed -i 's/private static final boolean LoadFromAssets = false;/private static final boolean LoadFromAssets = true;/' app/src/main/java/com/fgl27/twitch/Constants.java
+          # XtraProxy.js must be loaded after Settings.js and PlayHLS.js.
+          sed -i '/<script src="specific\/Settings.js" defer><\/script>/a\        <script src="specific/XtraProxy.js" defer></script>' app/src/main/assets/app/index.html
 
       - name: Disable Firebase build plugins for debug artifact
         working-directory: apk

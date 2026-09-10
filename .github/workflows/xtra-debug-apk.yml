@@ -35,14 +35,11 @@ jobs:
           cp -R ../app app/src/main/assets/app
           sed -i 's/private static final boolean LoadFromAssets = false;/private static final boolean LoadFromAssets = true;/' app/src/main/java/com/fgl27/twitch/Constants.java
 
-      - name: Disable Firebase-only build plugins for debug artifact
+      - name: Disable Firebase build plugins for debug artifact
         working-directory: apk
         run: |
           sed -i "/apply plugin: 'com.google.gms.google-services'/d" app/build.gradle
           sed -i "/apply plugin: 'com.google.firebase.crashlytics'/d" app/build.gradle
-          sed -i "/implementation platform('com.google.firebase:firebase-bom:33.14.0')/d" app/build.gradle
-          sed -i "/implementation 'com.google.firebase:firebase-analytics'/d" app/build.gradle
-          sed -i "/implementation 'com.google.firebase:firebase-crashlytics'/d" app/build.gradle
 
       - name: Build debug APK
         working-directory: apk
@@ -52,5 +49,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SmartTwitchTV-Xtra-debug
-          path: apk/app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error

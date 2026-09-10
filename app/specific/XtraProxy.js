@@ -14,7 +14,6 @@ var STTV_XTRA_PROXY_SERVERS = [
 var STTV_XTRA_PROXY_UPSTREAM = 'https://usher.ttvnw.net/api/v2/channel/hls/';
 var STTV_XTRA_PROXY_PARAMS = '?allow_source=true&allow_audio_only=true&fast_bread=true';
 
-/* Add persistent settings without modifying the large generated Settings.js. */
 Settings_value.xtra_proxy = {
     values: ['no', 'yes'],
     defaultValue: 1
@@ -24,7 +23,6 @@ Settings_value.xtra_proxy_server = {
     defaultValue: 1
 };
 
-/* Make the existing Proxy settings entry visible in the main settings list. */
 var STTV_XTRA_ORIGINAL_SETTINGS_CONTENT = Settings_Content;
 Settings_Content = function (key, valuesArray, STR, STR_SUMMARY) {
     var result = STTV_XTRA_ORIGINAL_SETTINGS_CONTENT(key, valuesArray, STR, STR_SUMMARY);
@@ -41,7 +39,6 @@ Settings_Content = function (key, valuesArray, STR, STR_SUMMARY) {
     return result;
 };
 
-/* Extend the existing single-active-proxy selector. */
 proxyArray.push('xtra_proxy');
 proxyArrayFull.splice(proxyArrayFull.length - 1, 0, 'xtra_proxy');
 
@@ -69,7 +66,6 @@ Settings_proxy_set_current = function (current) {
     STTV_XTRA_ORIGINAL_PROXY_SET_CURRENT(current);
 };
 
-/* The normal proxy dialog is extended with Xtra controls. */
 var STTV_XTRA_ORIGINAL_PROXY_DIALOG = Settings_DialogShowProxy;
 Settings_DialogShowProxy = function (click) {
     Settings_value.xtra_proxy.values = [STR_NO, STR_YES];
@@ -116,7 +112,6 @@ Settings_DialogShowProxy = function (click) {
     Settings_DialogShow(obj, PROXY_SETTINGS + STR_BR + STR_BR + PROXY_SETTINGS_SUMMARY, click);
 };
 
-/* Apply proxy changes immediately from the dialog. */
 var STTV_XTRA_ORIGINAL_DIALOG_RIGHT_LEFT_AFTER = Settings_DialogRightLeftAfter;
 Settings_DialogRightLeftAfter = function (key, offset, skipDefault) {
     STTV_XTRA_ORIGINAL_DIALOG_RIGHT_LEFT_AFTER(key, offset, skipDefault);
@@ -130,8 +125,15 @@ Settings_DialogRightLeftAfter = function (key, offset, skipDefault) {
     }
 };
 
-/* Route only live playlist requests through the selected RTE endpoint.
- * VODs and clips keep the original SmartTwitchTV URL generation. */
+/* Re-apply the persisted Xtra selection after settings are restored on every app start. */
+var STTV_XTRA_ORIGINAL_SET_DEFAULTS = Settings_SetDefaults;
+Settings_SetDefaults = function () {
+    STTV_XTRA_ORIGINAL_SET_DEFAULTS();
+    if (Settings_Obj_default('xtra_proxy') === 1) {
+        Settings_set_all_proxy('xtra_proxy');
+    }
+};
+
 var STTV_XTRA_ORIGINAL_GET_PLAYLIST_URL = PlayHLS_GetPlayListUrl;
 PlayHLS_GetPlayListUrl = function (isLive, Channel_or_VOD_Id, Token, Sig, useProxy) {
     if (isLive && useProxy && proxyType === 'xtra_proxy') {

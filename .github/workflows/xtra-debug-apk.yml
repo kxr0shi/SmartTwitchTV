@@ -65,28 +65,9 @@ jobs:
           path.write_text(text)
           PY
 
-      - name: Prepare persistent signing key
-        env:
-          ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
-        run: |
-          test -n "$ANDROID_SIGNING_KEYSTORE_BASE64" || {
-            echo "Missing required secret: ANDROID_SIGNING_KEYSTORE_BASE64"
-            exit 1
-          }
-          echo "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/smarttwitchtv-release.keystore"
-          test -s "$RUNNER_TEMP/smarttwitchtv-release.keystore"
-
-      - name: Build updateable debug APK
+      - name: Build standalone debug APK
         working-directory: apk
-        env:
-          ANDROID_SIGNING_KEYSTORE_PATH: ${{ runner.temp }}/smarttwitchtv-release.keystore
-          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
-          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
-          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         run: |
-          test -n "$ANDROID_SIGNING_STORE_PASSWORD" || { echo "Missing secret: ANDROID_SIGNING_STORE_PASSWORD"; exit 1; }
-          test -n "$ANDROID_SIGNING_KEY_ALIAS" || { echo "Missing secret: ANDROID_SIGNING_KEY_ALIAS"; exit 1; }
-          test -n "$ANDROID_SIGNING_KEY_PASSWORD" || { echo "Missing secret: ANDROID_SIGNING_KEY_PASSWORD"; exit 1; }
           ./gradlew :app:assembleDebug --no-daemon -PciVersionCode=$((100000 + GITHUB_RUN_NUMBER))
 
       - name: Upload APK

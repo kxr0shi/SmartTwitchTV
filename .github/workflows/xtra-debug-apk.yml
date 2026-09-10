@@ -11,8 +11,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout SmartTwitchTV
         uses: actions/checkout@v4
+
+      - name: Checkout required custom AndroidX Media fork
+        uses: actions/checkout@v4
+        with:
+          repository: fgl27/media
+          path: media
 
       - name: Set up Java
         uses: actions/setup-java@v4

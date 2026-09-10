@@ -24,6 +24,23 @@ Settings_value.xtra_proxy_server = {
     defaultValue: 1
 };
 
+/* Make the existing Proxy settings entry visible in the main settings list. */
+var STTV_XTRA_ORIGINAL_SETTINGS_CONTENT = Settings_Content;
+Settings_Content = function (key, valuesArray, STR, STR_SUMMARY) {
+    var result = STTV_XTRA_ORIGINAL_SETTINGS_CONTENT(key, valuesArray, STR, STR_SUMMARY);
+
+    if (key === 'speed_adjust') {
+        result += STTV_XTRA_ORIGINAL_SETTINGS_CONTENT(
+            'proxy_settings',
+            [STR_ENTER_TO_OPEN],
+            PROXY_SETTINGS,
+            PROXY_SETTINGS_SUMMARY
+        );
+    }
+
+    return result;
+};
+
 /* Extend the existing single-active-proxy selector. */
 proxyArray.push('xtra_proxy');
 proxyArrayFull.splice(proxyArrayFull.length - 1, 0, 'xtra_proxy');
@@ -52,7 +69,7 @@ Settings_proxy_set_current = function (current) {
     STTV_XTRA_ORIGINAL_PROXY_SET_CURRENT(current);
 };
 
-/* The normal settings dialog is extended with Xtra controls. */
+/* The normal proxy dialog is extended with Xtra controls. */
 var STTV_XTRA_ORIGINAL_PROXY_DIALOG = Settings_DialogShowProxy;
 Settings_DialogShowProxy = function (click) {
     Settings_value.xtra_proxy.values = [STR_NO, STR_YES];

@@ -41,6 +41,26 @@ jobs:
           sed -i "/apply plugin: 'com.google.gms.google-services'/d" app/build.gradle
           sed -i "/apply plugin: 'com.google.firebase.crashlytics'/d" app/build.gradle
 
+      - name: Disable Firebase initialization in debug APK
+        working-directory: apk
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/com/fgl27/twitch/PlayerActivity.java')
+          text = path.read_text()
+          text = text.replace(
+              '            FirebaseApp.initializeApp(this);\n'
+              '            FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true);\n',
+              '            // Firebase/Crashlytics disabled for the standalone debug APK.\n'
+          )
+          text = text.replace(
+              '            FirebaseCrashlytics.getInstance().sendUnsentReports();\n\n            DataThreadPool.execute',
+              '            DataThreadPool.execute'
+          )
+          path.write_text(text)
+          PY
+
       - name: Build debug APK
         working-directory: apk
         run: ./gradlew :app:assembleDebug --no-daemon

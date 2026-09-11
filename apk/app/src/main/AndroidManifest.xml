@@ -15,7 +15,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with SmartTwitchTV.  If not, see <https://github.com/fgl27/SmartTwitchTV/blob/master/LICENSE>.
+ * along with SmartTwitchTV.  If not, see <https://www.gnu.org/licenses/>.
  *
  */
 -->
@@ -47,8 +47,8 @@
     <application
         android:allowBackup="true"
         android:fullBackupContent="true"
-        android:icon="@mipmap/app_icon"
-        android:roundIcon="@mipmap/app_icon"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:banner="@mipmap/app_icon"
         android:label="@string/app_name"
         android:theme="@style/AppTheme"
@@ -59,7 +59,7 @@
             android:exported="true"
             android:name=".PlayerActivity"
             android:label="@string/app_name"
-            android:logo="@mipmap/app_icon"
+            android:logo="@mipmap/ic_launcher"
             android:launchMode="singleInstance"
             android:theme="@style/AppTheme.Launcher"
             android:screenOrientation="landscape"

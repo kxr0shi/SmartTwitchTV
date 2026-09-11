@@ -21,8 +21,9 @@ android {
         targetSdkVersion 35
         compileSdk 35
 
-        versionCode versions.publishVersionCode
-        versionName versions.publishVersion + versions.publishVersionCode
+        def ciVersionCode = project.findProperty('ciVersionCode')
+        versionCode ciVersionCode != null ? ciVersionCode.toInteger() : versions.publishVersionCode
+        versionName versions.publishVersion + versionCode
 
     }
 
@@ -38,6 +39,20 @@ android {
         debug {
             applicationIdSuffix ".debug"
         }
+    }
+
+    // The CI debug APK uses a persistent signing key so our builds can update
+    // each other. The key itself is supplied only through GitHub Actions secrets.
+    if (System.getenv('ANDROID_SIGNING_KEYSTORE_PATH') != null) {
+        signingConfigs {
+            ci {
+                storeFile file(System.getenv('ANDROID_SIGNING_KEYSTORE_PATH'))
+                storePassword System.getenv('ANDROID_SIGNING_STORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_SIGNING_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_SIGNING_KEY_PASSWORD')
+            }
+        }
+        buildTypes.debug.signingConfig signingConfigs.ci
     }
 
     compileOptions {

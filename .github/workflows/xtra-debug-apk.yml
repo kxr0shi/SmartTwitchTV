@@ -1,0 +1,80 @@
+name: Build Xtra debug APK
+
+on:
+  push:
+    branches:
+      - feature/rte-xtra-proxy
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout SmartTwitchTV
+        uses: actions/checkout@v4
+
+      - name: Checkout required custom AndroidX Media fork
+        run: |
+          git clone --depth 1 https://github.com/fgl27/media.git ../media
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Verify AndroidX Media checkout
+        run: test -f ../media/core_settings.gradle
+
+      - name: Prepare embedded web app
+        working-directory: apk
+        run: |
+          rm -rf app/src/main/assets/app
+          mkdir -p app/src/main/assets
+          cp -R ../app app/src/main/assets/app
+          sed -i 's/private static final boolean LoadFromAssets = false;/private static final boolean LoadFromAssets = true;/' app/src/main/java/com/fgl27/twitch/Constants.java
+          # XtraProxy.js must be loaded after Settings.js and PlayHLS.js.
+          sed -i '/<script src="specific\/Settings.js" defer><\/script>/a\        <script src="specific/XtraProxy.js" defer></script>' app/src/main/assets/app/index.html
+          # Add modern rounded corners to stream thumbnails and banners.
+          sed -i '/<script src="specific\/XtraProxy.js" defer><\/script>/a\        <script src="specific/RoundedCorners.js" defer></script>' app/src/main/assets/app/index.html
+
+      - name: Disable Firebase build plugins for debug artifact
+        working-directory: apk
+        run: |
+          sed -i "/apply plugin: 'com.google.gms.google-services'/d" app/build.gradle
+          sed -i "/apply plugin: 'com.google.firebase.crashlytics'/d" app/build.gradle
+
+      - name: Disable Firebase initialization in debug APK
+        working-directory: apk
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/com/fgl27/twitch/PlayerActivity.java')
+          text = path.read_text()
+          text = text.replace(
+              '            FirebaseApp.initializeApp(this);\n'
+              '            FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true);\n',
+              '            // Firebase/Crashlytics disabled for the standalone debug APK.\n'
+          )
+          text = text.replace(
+              '            FirebaseCrashlytics.getInstance().sendUnsentReports();\n\n            DataThreadPool.execute',
+              '            DataThreadPool.execute'
+          )
+          path.write_text(text)
+          PY
+
+      - name: Build standalone debug APK
+        working-directory: apk
+        run: |
+          ./gradlew :app:assembleDebug --no-daemon -PciVersionCode=$((100000 + GITHUB_RUN_NUMBER))
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartTwitchTV-Xtra-debug
+          path: apk/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      # Trigger a fresh build after APK configuration changes.

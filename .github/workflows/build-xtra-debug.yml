@@ -1,0 +1,16 @@
+name: Build Xtra debug APK
+
+on:
+  workflow_dispatch: # Включает кнопку "Run workflow" для ручного запуска
+  push:
+    branches:
+      - feature/rte-xtra-proxy # Автозапуск при пуше в эту ветку
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Ниже идут ваши шаги сборки (например, установка Java и сборка Gradle)

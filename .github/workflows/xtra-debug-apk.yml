@@ -16,8 +16,8 @@ jobs:
 
       - name: Apply Twitch low-latency player changes
         run: |
-          git fetch https://github.com/RikuXan/SmartTwitchTV.git e18a795950338fa473155acc2d54abf375032b52 --no-tags
-          git cherry-pick e18a795950338fa473155acc2d54abf375032b52
+          git fetch --depth 1 https://github.com/RikuXan/SmartTwitchTV.git feat/low-latency-improvements
+          git cherry-pick FETCH_HEAD
 
       - name: Checkout Twitch low-latency AndroidX Media fork
         run: |

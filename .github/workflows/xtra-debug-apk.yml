@@ -16,6 +16,8 @@ jobs:
 
       - name: Apply Twitch low-latency player changes
         run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
           git fetch --depth 1 https://github.com/RikuXan/SmartTwitchTV.git feat/low-latency-improvements
           git cherry-pick FETCH_HEAD
 

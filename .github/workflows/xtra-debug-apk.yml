@@ -16,10 +16,11 @@ jobs:
 
       - name: Apply Twitch low-latency player changes
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git fetch --depth 1 https://github.com/RikuXan/SmartTwitchTV.git feat/low-latency-improvements
-          git cherry-pick FETCH_HEAD
+          git fetch --depth 2 https://github.com/RikuXan/SmartTwitchTV.git feat/low-latency-improvements
+          git diff FETCH_HEAD^ FETCH_HEAD -- \
+            apk/app/src/main/java/com/fgl27/twitch/PlayerActivity.java \
+            apk/app/src/main/java/com/fgl27/twitch/Tools.java > /tmp/low-latency.patch
+          git apply --whitespace=nowarn /tmp/low-latency.patch
 
       - name: Checkout Twitch low-latency AndroidX Media fork
         run: |

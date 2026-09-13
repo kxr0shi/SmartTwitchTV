@@ -14,9 +14,14 @@ jobs:
       - name: Checkout SmartTwitchTV
         uses: actions/checkout@v4
 
-      - name: Checkout required custom AndroidX Media fork
+      - name: Apply Twitch low-latency player changes
         run: |
-          git clone --depth 1 https://github.com/fgl27/media.git ../media
+          git fetch https://github.com/RikuXan/SmartTwitchTV.git e18a795950338fa473155acc2d54abf375032b52 --no-tags
+          git cherry-pick e18a795950338fa473155acc2d54abf375032b52
+
+      - name: Checkout Twitch low-latency AndroidX Media fork
+        run: |
+          git clone --depth 1 --branch feat/twitch-prefetch-low-latency https://github.com/RikuXan/media.git ../media
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -38,6 +43,23 @@ jobs:
           sed -i '/<script src="specific\/Settings.js" defer><\/script>/a\        <script src="specific/XtraProxy.js" defer></script>' app/src/main/assets/app/index.html
           # Add modern rounded corners to stream thumbnails and banners.
           sed -i '/<script src="specific\/XtraProxy.js" defer><\/script>/a\        <script src="specific/RoundedCorners.js" defer></script>' app/src/main/assets/app/index.html
+
+      - name: Enable Twitch stitched-ad filter
+        working-directory: apk
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/com/fgl27/twitch/Tools.java')
+          text = path.read_text()
+          marker = '        if (Type == 1) {\n'
+          replacement = marker + '            mainPlaylist = TwitchAdsFilter.rewrite(mainPlaylist);\n'
+          if 'TwitchAdsFilter.rewrite(mainPlaylist)' not in text:
+              if marker not in text:
+                  raise SystemExit('buildMediaSource marker not found')
+              text = text.replace(marker, replacement, 1)
+              path.write_text(text)
+          PY
 
       - name: Disable Firebase build plugins for debug artifact
         working-directory: apk
@@ -76,5 +98,3 @@ jobs:
           name: SmartTwitchTV-Xtra-debug
           path: apk/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-
-      # Trigger a fresh build after APK configuration changes.

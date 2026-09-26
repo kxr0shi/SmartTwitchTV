@@ -57,6 +57,11 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.NoRouteToHostException;
 import java.net.URL;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.TimeZone;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -319,6 +324,7 @@ public class DefaultHttpDataSource extends BaseDataSource implements HttpDataSou
     private boolean isPlaylist;
     private int readPosition;
     private int bytesRemaining;
+    private byte[] activePlaylistBytes;
 
     private DefaultHttpDataSource(
         @Nullable String userAgent,
@@ -347,6 +353,7 @@ public class DefaultHttpDataSource extends BaseDataSource implements HttpDataSou
         this.keepPostFor302Redirects = keepPostFor302Redirects;
         this.mainPlaylist = mainPlaylist;
         this.uri = uri;
+        this.activePlaylistBytes = mainPlaylist;
     }
 
     @UnstableApi
@@ -405,7 +412,12 @@ public class DefaultHttpDataSource extends BaseDataSource implements HttpDataSou
     @UnstableApi
     @Override
     public long open(DataSpec dataSpec) throws HttpDataSourceException {
-        isPlaylist = dataSpec.uri.toString().equals(uri.toString()) && (mainPlaylist.length > 0);
+        isPlaylist = false;
+        activePlaylistBytes = null;
+        if (dataSpec.uri.toString().equals(uri.toString()) && mainPlaylist.length > 0) {
+            isPlaylist = true;
+            activePlaylistBytes = mainPlaylist;
+        }
 
         this.dataSpec = dataSpec;
         bytesRead = 0;
@@ -508,6 +520,29 @@ public class DefaultHttpDataSource extends BaseDataSource implements HttpDataSou
                 throw new HttpDataSourceException(e, dataSpec, PlaybackException.ERROR_CODE_IO_UNSPECIFIED, HttpDataSourceException.TYPE_OPEN);
             }
 
+            // VAFT-style native integration: Twitch ad markers are filtered from HLS
+            // media playlists before Media3 sees the manifest. The browser UserScript
+            // cannot run inside the native Media3 player, so this is its native equivalent.
+            if (isM3u8(dataSpec.uri)) {
+                try {
+                    byte[] playlistBytes = ByteStreams.toByteArray(inputStream);
+                    inputStream.close();
+                    inputStream = null;
+                    activePlaylistBytes = rewriteTwitchPlaylist(playlistBytes);
+                    isPlaylist = true;
+                    readPosition = 0;
+                    bytesRemaining = activePlaylistBytes.length;
+                    bytesToRead = activePlaylistBytes.length;
+                    closeConnectionQuietly();
+                    opened = true;
+                    transferStarted(dataSpec);
+                    return bytesRemaining;
+                } catch (IOException e) {
+                    closeConnectionQuietly();
+                    throw new HttpDataSourceException(e, dataSpec, PlaybackException.ERROR_CODE_IO_UNSPECIFIED, HttpDataSourceException.TYPE_OPEN);
+                }
+            }
+
             opened = true;
             transferStarted(dataSpec);
 
@@ -537,7 +572,7 @@ public class DefaultHttpDataSource extends BaseDataSource implements HttpDataSou
             }
 
             length = min(length, bytesRemaining);
-            System.arraycopy(mainPlaylist, readPosition, buffer, offset, length);
+            System.arraycopy(activePlaylistBytes, readPosition, buffer, offset, length);
             readPosition += length;
             bytesRemaining -= length;
             bytesTransferred(length);
@@ -925,6 +960,180 @@ public class DefaultHttpDataSource extends BaseDataSource implements HttpDataSou
     private static boolean isCompressed(HttpURLConnection connection) {
         String contentEncoding = connection.getHeaderField("Content-Encoding");
         return "gzip".equalsIgnoreCase(contentEncoding);
+    }
+
+    private static boolean isM3u8(Uri uri) {
+        String path = uri.getPath();
+        return path != null && path.toLowerCase(java.util.Locale.US).endsWith(".m3u8");
+    }
+
+    /**
+     * Native adaptation of the uploaded VAFT/TwitchAdSolutions HLS logic.
+     *
+     * Twitch marks stitched ads with EXT-X-DATERANGE entries whose ID starts
+     * with "stitched-ad-" or whose CLASS is "twitch-stitched-ad". We use the
+     * program-date-time and duration of media segments to drop only segments
+     * that fall inside those ad ranges. Prefetch entries are also suppressed
+     * while an ad range is present, matching VAFT's low-latency safety behavior.
+     */
+    private static byte[] rewriteTwitchPlaylist(byte[] input) {
+        String text = new String(input, StandardCharsets.UTF_8);
+        if (!text.contains("#EXT-X-DATERANGE") || !text.contains("stitched-ad")) {
+            return input;
+        }
+
+        String[] lines = text.replace("\\r", "").split("\\n", -1);
+        ArrayList<AdRange> ads = new ArrayList<>();
+        for (String line : lines) {
+            if (!line.startsWith("#EXT-X-DATERANGE:")) continue;
+            String upper = line.toLowerCase(java.util.Locale.US);
+            if (!upper.contains("stitched-ad-") && !upper.contains("class=\"twitch-stitched-ad\"")) continue;
+
+            String start = attribute(line, "START-DATE");
+            String duration = attribute(line, "DURATION");
+            long startMs = parseIsoDate(start);
+            long durationMs = parseDurationMs(duration);
+            if (startMs >= 0 && durationMs > 0) {
+                ads.add(new AdRange(startMs, startMs + durationMs));
+            }
+        }
+
+        if (ads.isEmpty()) return input;
+
+        StringBuilder out = new StringBuilder(text.length());
+        long segmentDate = -1;
+        boolean adActive = false;
+
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+
+            if (line.startsWith("#EXT-X-DATERANGE:")) {
+                String lower = line.toLowerCase(java.util.Locale.US);
+                if (lower.contains("stitched-ad-") || lower.contains("class=\"twitch-stitched-ad\"")) {
+                    continue;
+                }
+            }
+
+            if (line.startsWith("#EXT-X-PROGRAM-DATE-TIME:")) {
+                long parsed = parseIsoDate(line.substring("#EXT-X-PROGRAM-DATE-TIME:".length()).trim());
+                if (parsed >= 0) segmentDate = parsed;
+                if (isInsideAd(segmentDate, ads)) {
+                    adActive = true;
+                    continue;
+                }
+                adActive = false;
+                appendLine(out, line);
+                continue;
+            }
+
+            if (line.startsWith("#EXTINF:") && i + 1 < lines.length) {
+                double duration = parseExtInfDuration(line);
+                boolean segmentIsAd = isInsideAd(segmentDate, ads);
+                if (segmentIsAd) {
+                    adActive = true;
+                    i++;
+                    if (segmentDate >= 0 && duration > 0) {
+                        segmentDate += Math.round(duration * 1000.0);
+                    }
+                    continue;
+                }
+                appendLine(out, line);
+                if (segmentDate >= 0 && duration > 0) {
+                    segmentDate += Math.round(duration * 1000.0);
+                }
+                appendLine(out, lines[++i]);
+                adActive = false;
+                continue;
+            }
+
+            // Do not let Media3 prefetch an ad segment while keeping low latency elsewhere.
+            if (line.startsWith("#EXT-X-TWITCH-PREFETCH:") && (adActive || isInsideAd(segmentDate, ads))) {
+                continue;
+            }
+
+            // Rewrite ad tracking URLs the same way VAFT does.
+            line = line.replaceAll(
+                "(X-TV-TWITCH-AD-URL=\")([^\"]*)(\")",
+                "$1https://twitch.tv$3"
+            ).replaceAll(
+                "(X-TV-TWITCH-AD-CLICK-TRACKING-URL=\")([^\"]*)(\")",
+                "$1https://twitch.tv$3"
+            );
+            appendLine(out, line);
+        }
+
+        return out.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static void appendLine(StringBuilder out, String line) {
+        out.append(line).append('\\n');
+    }
+
+    private static boolean isInsideAd(long timeMs, ArrayList<AdRange> ads) {
+        if (timeMs < 0) return false;
+        for (AdRange ad : ads) {
+            if (timeMs >= ad.startMs && timeMs < ad.endMs) return true;
+        }
+        return false;
+    }
+
+    private static String attribute(String line, String key) {
+        String prefix = key + "=\"";
+        int start = line.indexOf(prefix);
+        if (start < 0) {
+            prefix = key + "=";
+            start = line.indexOf(prefix);
+            if (start < 0) return null;
+            start += prefix.length();
+            int end = line.indexOf(',', start);
+            return end < 0 ? line.substring(start) : line.substring(start, end);
+        }
+        start += prefix.length();
+        int end = line.indexOf('\"', start);
+        return end < 0 ? null : line.substring(start, end);
+    }
+
+    private static double parseExtInfDuration(String line) {
+        try {
+            int colon = line.indexOf(':');
+            int comma = line.indexOf(',', colon);
+            return Double.parseDouble(line.substring(colon + 1, comma >= 0 ? comma : line.length()));
+        } catch (Exception ignored) {
+            return -1;
+        }
+    }
+
+    private static long parseDurationMs(String value) {
+        if (value == null) return -1;
+        try {
+            return Math.round(Double.parseDouble(value) * 1000.0);
+        } catch (Exception ignored) {
+            return -1;
+        }
+    }
+
+    private static long parseIsoDate(String value) {
+        if (value == null || value.isEmpty()) return -1;
+        String[] formats = {"yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ssX"};
+        for (String format : formats) {
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat(format, java.util.Locale.US);
+                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                Date date = sdf.parse(value);
+                if (date != null) return date.getTime();
+            } catch (ParseException ignored) {}
+        }
+        return -1;
+    }
+
+    private static final class AdRange {
+        final long startMs;
+        final long endMs;
+
+        AdRange(long startMs, long endMs) {
+            this.startMs = startMs;
+            this.endMs = endMs;
+        }
     }
 
     private static class NullFilteringHeadersMap extends ForwardingMap<String, List<String>> {

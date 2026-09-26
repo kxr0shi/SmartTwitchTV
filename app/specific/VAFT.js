@@ -245,7 +245,7 @@
           });
         }
         url = url.trimEnd();
-        if (url.endsWith('m3u8') && !url.includes('/channel/hls/')) {
+        if (url.endsWith('m3u8')) {
           return new Promise(function (resolve, reject) {
             const processAfter = async function (response) {
               if (response.status === 200) {

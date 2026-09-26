@@ -1066,7 +1066,7 @@ public class DefaultHttpDataSource extends BaseDataSource implements HttpDataSou
     }
 
     private static void appendLine(StringBuilder out, String line) {
-        out.append(line).append('\\n');
+        out.append(line).append('\n');
     }
 
     private static boolean isInsideAd(long timeMs, ArrayList<AdRange> ads) {

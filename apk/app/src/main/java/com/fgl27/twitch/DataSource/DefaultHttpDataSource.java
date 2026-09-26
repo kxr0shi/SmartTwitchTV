@@ -1114,7 +1114,7 @@ public class DefaultHttpDataSource extends BaseDataSource implements HttpDataSou
 
     private static long parseIsoDate(String value) {
         if (value == null || value.isEmpty()) return -1;
-        String[] formats = {"yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ssX"};
+        String[] formats = {"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", "yyyy-MM-dd'T'HH:mm:ss'Z'"};
         for (String format : formats) {
             try {
                 SimpleDateFormat sdf = new SimpleDateFormat(format, java.util.Locale.US);
